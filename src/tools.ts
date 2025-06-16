@@ -24,6 +24,7 @@ import navigate from './tools/navigate.js';
 import network from './tools/network.js';
 import pdf from './tools/pdf.js';
 import snapshot from './tools/snapshot.js';
+import storage from './tools/storage.js';
 import tabs from './tools/tabs.js';
 import screenshot from './tools/screenshot.js';
 import testing from './tools/testing.js';
@@ -44,6 +45,7 @@ export const snapshotTools: Tool<any>[] = [
   ...pdf,
   ...screenshot,
   ...snapshot,
+  ...storage(true),
   ...tabs(true),
   ...testing,
   ...wait(true),
@@ -59,6 +61,7 @@ export const visionTools: Tool<any>[] = [
   ...navigate(false),
   ...network,
   ...pdf,
+  ...storage(false),
   ...tabs(false),
   ...testing,
   ...vision,

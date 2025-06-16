@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+import fs from 'fs';
 import { test, expect } from './fixtures.js';
 
 test('browser_navigate', async ({ client, server }) => {
@@ -236,4 +237,78 @@ test('browser_resize', async ({ client, server }) => {
 await page.setViewportSize({ width: 390, height: 780 });
 \`\`\``);
   await expect.poll(() => client.callTool({ name: 'browser_snapshot' })).toContainTextContent('Window size: 390x780');
+});
+
+test('browser_save_and_load_storage_state', async ({ client, server }, testInfo) => {
+  const storageStatePath = testInfo.outputPath('storage-state.json');
+
+  server.setContent('/', `
+    <title>Storage Test</title>
+    <body>
+      <div id="storage">
+        <div>LocalStorage: <span id="localStorage"></span></div>
+        <div>Cookie: <span id="cookie"></span></div>
+      </div>
+      <script>
+        localStorage.setItem('testKey', 'testValue');
+        document.cookie = 'testCookie=cookieValue; path=/';
+        document.getElementById('localStorage').textContent = localStorage.getItem('testKey') || 'empty';
+        document.getElementById('cookie').textContent = document.cookie || 'empty';
+      </script>
+    </body>
+  `, 'text/html');
+
+  await client.callTool({
+    name: 'browser_navigate',
+    arguments: { url: server.PREFIX },
+  });
+
+  // Verify storage is set
+  const initialSnapshot = await client.callTool({ name: 'browser_snapshot' });
+  expect(initialSnapshot).toContainTextContent('testValue');
+  expect(initialSnapshot).toContainTextContent('testCookie=cookieValue');
+
+  // Save storage state
+  const saveResponse = await client.callTool({
+    name: 'browser_save_storage_state',
+    arguments: { path: storageStatePath },
+  });
+
+  expect(saveResponse).toEqual({
+    content: [
+      {
+        text: `Storage state saved to ${storageStatePath}`,
+        type: 'text',
+      },
+      {
+        text: expect.stringContaining(`- Ran Playwright code:`),
+        type: 'text',
+      },
+    ],
+  });
+
+  // Verify the file was created and contains expected data
+  expect(fs.existsSync(storageStatePath)).toBe(true);
+  const savedState = JSON.parse(fs.readFileSync(storageStatePath, 'utf-8'));
+
+  // Check that cookies were saved
+  expect(savedState.cookies).toEqual(expect.arrayContaining([
+    expect.objectContaining({
+      name: 'testCookie',
+      value: 'cookieValue',
+    }),
+  ]));
+
+  // Check that localStorage was saved
+  expect(savedState.origins).toEqual(expect.arrayContaining([
+    expect.objectContaining({
+      origin: server.PREFIX.slice(0, -1), // Remove trailing slash
+      localStorage: expect.arrayContaining([
+        expect.objectContaining({
+          name: 'testKey',
+          value: 'testValue',
+        }),
+      ]),
+    }),
+  ]));
 });
